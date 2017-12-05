@@ -24,6 +24,7 @@ import (
 	"github.com/openfaas/faas/gateway/metrics"
 	"github.com/openfaas/faas/gateway/requests"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/satori/go.uuid"
 )
 
 const watchdogPort = 8080
@@ -48,6 +49,7 @@ func MakeProxy(metrics metrics.MetricOptions, wildcard bool, client *client.Clie
 		defer r.Body.Close()
 
 		//place holder for uuid
+		func_id := uuid.NewV4().String()
 		switch r.Method {
 		case "POST", "GET":
 			logger.Infoln(r.Header)
@@ -68,7 +70,7 @@ func MakeProxy(metrics metrics.MetricOptions, wildcard bool, client *client.Clie
 			}
 
 			if len(serviceName) > 0 {
-				lookupInvoke(w, r, metrics, serviceName, client, logger, &proxyClient)
+				lookupInvoke(w, r, metrics, serviceName, client, logger, &proxyClient, func_id)
 			} else {
 				w.WriteHeader(http.StatusBadRequest)
 				w.Write([]byte("Provide an x-function header or valid route /function/function_name."))
@@ -80,7 +82,7 @@ func MakeProxy(metrics metrics.MetricOptions, wildcard bool, client *client.Clie
 	}
 }
 
-func lookupInvoke(w http.ResponseWriter, r *http.Request, metrics metrics.MetricOptions, name string, c *client.Client, logger *logrus.Logger, proxyClient *http.Client) {
+func lookupInvoke(w http.ResponseWriter, r *http.Request, metrics metrics.MetricOptions, name string, c *client.Client, logger *logrus.Logger, proxyClient *http.Client, func_id string) {
 	exists, err := lookupSwarmService(name, c)
 
 	if err != nil || exists == false {
@@ -97,7 +99,7 @@ func lookupInvoke(w http.ResponseWriter, r *http.Request, metrics metrics.Metric
 		defer trackTime(time.Now(), metrics, name)
 		forwardReq := requests.NewForwardRequest(r.Method, *r.URL)
 
-		invokeService(w, r, metrics, name, forwardReq, logger, proxyClient)
+		invokeService(w, r, metrics, name, forwardReq, logger, proxyClient, func_id)
 	}
 }
 
@@ -110,7 +112,7 @@ func lookupSwarmService(serviceName string, c *client.Client) (bool, error) {
 	return len(services) > 0, err
 }
 
-func invokeService(w http.ResponseWriter, r *http.Request, metrics metrics.MetricOptions, service string, forwardReq requests.ForwardRequest, logger *logrus.Logger, proxyClient *http.Client) {
+func invokeService(w http.ResponseWriter, r *http.Request, metrics metrics.MetricOptions, service string, forwardReq requests.ForwardRequest, logger *logrus.Logger, proxyClient *http.Client, func_id string) {
 	stamp := strconv.FormatInt(time.Now().Unix(), 10)
 
 	defer func(when time.Time) {
@@ -148,6 +150,7 @@ func invokeService(w http.ResponseWriter, r *http.Request, metrics metrics.Metri
 	request, err := http.NewRequest(r.Method, url, r.Body)
 
 	copyHeaders(&request.Header, &r.Header)
+	request.Header.Set("func-id", func_id)
 
 	response, err := proxyClient.Do(request)
 	if err != nil {
@@ -164,6 +167,7 @@ func invokeService(w http.ResponseWriter, r *http.Request, metrics metrics.Metri
 	defaultHeader := "text/plain"
 
 	w.Header().Set("Content-Type", GetContentType(response.Header, r.Header, defaultHeader))
+	w.Header().Set("func-id", func_id)
 
 	writeHead(service, metrics, response.StatusCode, w)
 
