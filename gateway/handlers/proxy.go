@@ -47,6 +47,7 @@ func MakeProxy(metrics metrics.MetricOptions, wildcard bool, client *client.Clie
 	return func(w http.ResponseWriter, r *http.Request) {
 		defer r.Body.Close()
 
+		//place holder for uuid
 		switch r.Method {
 		case "POST", "GET":
 			logger.Infoln(r.Header)
