@@ -1,8 +1,8 @@
 swagger: '2.0'
 info:
-  description: FaaS API documentation
-  version: 0.6.5
-  title: FaaS API Gateway
+  description: OpenFaaS API documentation
+  version: 0.8.1
+  title: OpenFaaS API Gateway
   license:
     name: MIT
 basePath: /
@@ -149,7 +149,6 @@ paths:
     post:
       summary: 'Invoke a function asynchronously in OpenFaaS'
       description: >-
-        ### This endpoint requires the asynchronous stack.
         See https://github.com/openfaas/faas/blob/master/guide/asynchronous.md.
       parameters:
         - in: path
@@ -198,6 +197,45 @@ paths:
           description: Function not found
         '500':
           description: Error connecting to function
+  '/system/function/{functionName}':
+    get:
+      summary: Get a summary of an OpenFaaS function
+      parameters:
+        - in: path
+          name: functionName
+          description: Function name
+          type: string
+          required: true
+      responses:
+        '200':
+          description: Function definition
+        '404':
+          description: Function not found
+        '500':
+          description: Error querying function
+  '/system/info':
+    get:
+      summary: Get info such as provider version number and provider orchestrator
+      produces:
+        - application/json
+      responses:
+        '200':
+          description: Info result
+          examples:
+            application/json: |-
+                {"provider":"faas-swarm","version":{"sha":"7108418d9dd6b329ddff40e7393b3166f8160a88","release":"0.2.6"},"orchestration":"swarm"}
+        '404':
+          description: Provider does not support info endpoint
+        '500':
+          description: Error finding info
+  '/healthz':
+    get:
+      summary: Healthcheck
+      responses:
+        '200':
+          description: Healthy
+        '500':
+          description: Not healthy
 definitions:
   DeleteFunctionRequest:
     type: object
@@ -221,10 +259,15 @@ definitions:
         type: string
         description: Process for watchdog to fork
       envVars:
+        type: object
+        additionalProperties:
+          type: string
+        description: Overrides to environmental variables
+      secrets:
         type: array
         items:
           type: string
-        description: Overrides to environmental variables
+        description: An array of names of secrets that are required to be loaded from the Docker Swarm.
       registryAuth:
         type: string
         description: >-
